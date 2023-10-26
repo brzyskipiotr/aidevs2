@@ -1,0 +1,43 @@
+import requests
+import json
+
+# Constants
+API_KEY = ""
+BASE_URL = "https://zadania.aidevs.pl"
+TASKNAME = "helloapi"
+
+# Step 1 - Authorization
+def get_token(api_key, taskname):
+    auth_endpoint = f"{BASE_URL}/token/{taskname.lower()}"
+    auth_payload = {
+        "apikey": api_key
+    }
+    auth_response = requests.post(auth_endpoint, json=auth_payload)
+    auth_data = auth_response.json()
+    return auth_data["token"]
+
+# Step 2 - Get the task
+def get_task(token):
+    task_endpoint = f"{BASE_URL}/task/{token}"
+    task_response = requests.get(task_endpoint)
+    task_data = task_response.json()
+    return task_data["cookie"]
+
+# Step 3 - Send the answer
+def send_answer(token, answer):
+    answer_endpoint = f"{BASE_URL}/answer/{token}"
+    answer_payload = {
+        "answer": answer
+    }
+    answer_response = requests.post(answer_endpoint, json=answer_payload)
+    return answer_response.json()
+
+# Run
+def run():
+    token = get_token(API_KEY, TASKNAME)
+    cookie = get_task(token)
+    response = send_answer(token, cookie)
+    print(response)
+
+if __name__ == "__main__":
+    run()
