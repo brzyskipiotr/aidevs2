@@ -1,0 +1,75 @@
+import requests
+import json
+import logging
+
+# Konfiguracja
+AI_DEVS_API_KEY = ""
+OPENAI_API_KEY = ""
+OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions"  
+URL = "https://zadania.aidevs.pl"
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
+def get_token(task):
+    response = requests.post(f"{URL}/token/{task}", json={"apikey": AI_DEVS_API_KEY})
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/token/{task} with BODY apikey: AI_DEVS_API_KEY")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+    return response.json()["token"]
+
+
+def get_input(token):
+    response = requests.get(f"{URL}/task/{token}")
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/task/{token} with METHOD GET")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+    return response.json()
+
+
+def submit(token, blog_content):
+    content_dict = {section: None for section in blog_content}
+    response = requests.post(f"{URL}/answer/{token}", json=content_dict)
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/answer/{token} with METHOD POST and BODY: {content_dict}")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+
+
+
+def get_blog_content_from_openai(blog_topics):
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.1,
+        "messages": [
+            {
+                "role": "system",
+                "content": 'Jesteś kucharzem w pizzerii.'
+            },
+            {
+                "role": "user",
+                "content": f'Przygotowujesz post o pizzy Margheritta na bloga.Tytuły podsekcji znajduja się w tablicy.Dodaj po kropce do tytułu jedno nowe zdanie wyjaśnienia. Każdy wpis na bloga ma zawierać dwa zdania.  Odpowiedz w formacie json  {{"sections": []}} Tytuły podrozdziałów: {json.dumps(blog_topics)}'
+            }
+        ]
+    }
+    response = requests.post(OPENAI_ENDPOINT, headers=headers, json=data)
+    response.raise_for_status()
+    print(f"REQUEST to {OPENAI_ENDPOINT} with METHOD POST, HEADERS: {headers}, BODY: {data}")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+    content = response.json()["choices"][0]["message"]["content"]
+    return json.loads(content)["sections"]
+
+
+def main():
+    token = get_token("blogger")
+    input_data = get_input(token)
+    blog_content = get_blog_content_from_openai(input_data["blog"])
+    print (input_data)
+    result = submit(token, blog_content)
+    print(blog_content)
+
+if __name__ == "__main__":
+    main()
