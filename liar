@@ -1,0 +1,86 @@
+import requests
+
+# Konfiguracja
+AI_DEVS_API_KEY = ""
+OPENAI_API_KEY = ""
+OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions"
+URL = "https://zadania.aidevs.pl"
+
+# Pytanie do API
+QUESTION = "What is the capital of Poland?"
+
+def print_request(url, method, headers=None, data=None):
+    print(f"\nREQUEST to {url} with METHOD {method}")
+    if headers:
+        print(f"HEADERS: {headers}")
+    if data:
+        print(f"BODY: {data}")
+
+def print_response(response):
+    print(f"RESPONSE STATUS: {response.status_code}")
+    print(f"BODY: {response.json()}")
+
+def get_token(task):
+    print_request(f"{URL}/token/{task}", "POST", None, {"apikey": AI_DEVS_API_KEY})
+    response = requests.post(f"{URL}/token/{task}", json={"apikey": AI_DEVS_API_KEY})
+    response.raise_for_status()
+    print_response(response)
+    return response.json()["token"]
+
+def ask_api(token, question):
+    print_request(f"{URL}/task/{token}", "POST", None, {"question": question})
+    response = requests.post(f"{URL}/task/{token}", data={"question": question})
+    response.raise_for_status()
+    print_response(response)
+    return response.json()["answer"]
+
+def check_lie(answer):
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": "gpt-4",
+        "temperature": 0.1,
+        "messages": [
+            {
+                "role": "system",
+                "content": f'Question: "{QUESTION}". If answer is correct return YES in response. If it`s a false return NO'
+            },
+            {
+                "role": "user",
+                "content": answer
+            }
+        ]
+    }
+    print_request(OPENAI_ENDPOINT, "POST", headers, data)
+    response = requests.post(OPENAI_ENDPOINT, headers=headers, json=data)
+    response.raise_for_status()
+    print_response(response)
+    content = response.json()["choices"][0]["message"]["content"]
+
+    # Interpretuj odpowiedź OpenAI jako "TAK" lub "NIE"
+    if "TAK" in content:
+        return "YES"
+    else:
+        return "NO"
+
+def submit(token, verdict):
+    print_request(f"{URL}/answer/{token}", "POST", None, {"answer": verdict})
+    response = requests.post(f"{URL}/answer/{token}", json={"answer": verdict})
+    response.raise_for_status()
+    print_response(response)
+    return response.json()
+
+def main():
+    try:
+        token = get_token("liar")
+        answer_from_api = ask_api(token, QUESTION)
+        verdict = check_lie(answer_from_api)
+        result = submit(token, verdict)
+        print(result)
+    except Exception as e:
+        print(f"Error occurs: {e}")
+
+if __name__ == "__main__":
+    main()
