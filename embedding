@@ -1,0 +1,54 @@
+import requests
+import json
+
+# Konfiguracja
+AI_DEVS_API_KEY = ""  
+OPENAI_API_KEY = ""  
+OPENAI_ENDPOINT = "https://api.openai.com/v1/engines/text-embedding-ada-002/embeddings"
+URL = "https://zadania.aidevs.pl"
+
+
+def get_token(task):
+    print(f"{URL}/token/{task}", "POST", None, {"apikey": AI_DEVS_API_KEY})
+    response = requests.post(f"{URL}/token/{task}", json={"apikey": AI_DEVS_API_KEY})
+    response.raise_for_status()
+    print(response)
+    return response.json()["token"]
+
+def get_embedding(text):
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "input": text
+    }
+    print(OPENAI_ENDPOINT, "POST", headers, data)
+    response = requests.post(OPENAI_ENDPOINT, headers=headers, json=data)
+    response.raise_for_status()
+    print(response)
+    embedding = response.json()["data"][0]["embedding"]
+    if len(embedding) != 1536:
+        raise ValueError(f"Oczekiwano 1536 elementów, otrzymano {len(embedding)}")
+    return embedding
+
+def submit_answer(token, answer):
+    endpoint = f"{URL}/answer/{token}"
+    print(endpoint, "POST", None, {"answer": answer})
+    response = requests.post(endpoint, json={"answer": answer})
+    response.raise_for_status()
+    print(response)
+    return response.json()
+
+def main():
+    try:
+        
+        token = get_token("embedding")
+        embedding = get_embedding("Hawaiian pizza")
+        result = submit_answer(token, embedding)
+        print(result)
+    except Exception as e:
+        print(f"Error occurs: {e}")
+
+if __name__ == "__main__":
+    main()
