@@ -1,0 +1,88 @@
+import requests
+import re
+
+# Konfiguracja
+AI_DEVS_API_KEY = ""
+OPENAI_API_KEY = ""
+OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions"
+URL = "https://zadania.aidevs.pl"
+
+
+def print_request(url, method, headers=None, data=None):
+    print(f"\nREQUEST to {url} with METHOD {method}")
+    if headers:
+        print(f"HEADERS: {headers}")
+    if data:
+        print(f"BODY: {data}")
+
+def print_response(response):
+    print(f"RESPONSE STATUS: {response.status_code}")
+    print(f"BODY: {response.json()}")
+
+def get_token(task):
+    print_request(f"{URL}/token/{task}", "POST", None, {"apikey": AI_DEVS_API_KEY})
+    response = requests.post(f"{URL}/token/{task}", json={"apikey": AI_DEVS_API_KEY})
+    response.raise_for_status()
+    print_response(response)
+    return response.json()["token"]
+
+def get_inprompt_data(token):
+    print_request(f"{URL}/task/{token}", "GET")
+    response = requests.get(f"{URL}/task/{token}")
+    response.raise_for_status()
+    print_response(response)
+    data = response.json()
+    return data['input'], data['question']
+
+def extract_name(question):
+    name_match = re.search(r"\b[A-Z][a-z]*\b", question)
+    if name_match:
+        return name_match.group(0)
+    else:
+        raise ValueError("No name found in the question")
+
+def filter_sentences(sentences, name):
+    return [sentence for sentence in sentences if name in sentence]
+
+def ask_gpt3(sentences, question):
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": "gpt-4",
+        "temperature": 0.1,  
+        "messages": [
+            {"role": "system", "content": "\n".join(sentences)},
+            {"role": "user", "content": question}
+        ]
+    }
+    print_request(OPENAI_ENDPOINT, "POST", headers, data)
+    response = requests.post(OPENAI_ENDPOINT, headers=headers, json=data)
+    response.raise_for_status()
+    print_response(response)
+    answer = response.json()["choices"][0]["message"]["content"]
+    return answer
+
+
+def submit(token, answer):
+    print_request(f"{URL}/answer/{token}", "POST", None, {"answer": answer})
+    response = requests.post(f"{URL}/answer/{token}", json={"answer": answer})
+    response.raise_for_status()
+    print_response(response)
+    return response.json()
+
+def main():
+    try:
+        token = get_token("inprompt")
+        sentences, question = get_inprompt_data(token)
+        name = extract_name(question)
+        filtered_sentences = filter_sentences(sentences, name)
+        answer = ask_gpt3(filtered_sentences, question)
+        result = submit(token, answer)
+        print(result)
+    except Exception as e:
+        print(f"Error occurs: {e}")
+
+if __name__ == "__main__":
+    main()
