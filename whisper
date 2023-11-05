@@ -1,0 +1,78 @@
+import requests
+import openai
+import logging
+from io import BytesIO
+
+# Konfiguracja
+AI_DEVS_API_KEY = ""
+OPENAI_API_KEY = ""
+URL = "https://zadania.aidevs.pl"
+
+# Konfiguracja logowania
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Konfiguracja klienta OpenAI
+openai.api_key = OPENAI_API_KEY
+
+def get_token(task):
+    response = requests.post(f"{URL}/token/{task}", json={"apikey": AI_DEVS_API_KEY})
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/token/{task} with BODY apikey: AI_DEVS_API_KEY")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+    return response.json()["token"]
+
+def get_input(token):
+    response = requests.get(f"{URL}/task/{token}")
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/task/{token} with METHOD GET")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+    return response.json()
+
+
+def submit(token, answer):
+    response = requests.post(f"{URL}/answer/{token}", json={"answer": answer})
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/answer/{token} with METHOD POST and BODY: {{'answer': {answer}}}")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+    return response.json()
+
+def transcribe_with_whisper(audio_url):
+    # Pobieranie pliku audio z URL jako strumień bajtów
+    response = requests.get(audio_url)
+    response.raise_for_status()
+
+    # Użycie BytesIO do stworzenia obiektu pliku w pamięci
+    audio_file = BytesIO(response.content)
+    audio_file.name = 'temp_audio.mp3'  # Ustawienie atrybutu name, wymaganego przez API
+
+    # Wykonanie transkrypcji za pomocą Whisper
+    transcript_response = openai.Audio.transcribe(model="whisper-1", file=audio_file)
+    
+    # Zamykamy obiekt BytesIO
+    audio_file.close()
+
+    return transcript_response["text"]
+
+def main():
+    task_name = "whisper"
+    token = get_token(task_name)
+    input_data = get_input(token)
+    
+    # Extract the URL from the message
+    message = input_data["msg"]
+    audio_url = message.split(' ')[-1]
+
+    # Make sure we have a valid URL
+    if not audio_url.startswith('http'):
+        raise ValueError("Invalid URL found in the input data")
+
+    # Wykonanie transkrypcji pliku audio
+    transcription = transcribe_with_whisper(audio_url)
+
+    # Wysłanie transkrypcji
+    result = submit(token, transcription)
+    logging.info(f"Transcription: {transcription}")
+    logging.info(f"Submission result: {result}")
+
+if __name__ == "__main__":
+    main()
