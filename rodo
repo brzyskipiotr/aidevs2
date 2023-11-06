@@ -1,0 +1,73 @@
+import requests
+import json
+import logging
+
+# Konfiguracja
+AI_DEVS_API_KEY = ""  # Wartość należy zastąpić rzeczywistym kluczem API
+OPENAI_API_KEY = ""  # Rzeczywisty klucz API dla OpenAI
+OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions"  
+URL = "https://zadania.aidevs.pl"
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# URL serwisu API
+URL = "https://zadania.aidevs.pl"
+
+
+def get_token(task):
+    response = requests.post(f"{URL}/token/{task}", json={"apikey": AI_DEVS_API_KEY})
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/token/{task} with BODY apikey: AI_DEVS_API_KEY")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+
+    return response.json()["token"]
+
+
+def get_input(token):
+    response = requests.get(f"{URL}/task/{token}")
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/task/{token} with METHOD GET")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+
+    return response.json()
+
+
+def submit(token, user_response):
+    payload = {"answer": user_response}  # Ensure the payload has an "answer" key
+    response = requests.post(f"{URL}/answer/{token}", json=payload)
+
+    try:
+        response.raise_for_status()
+        print(f"REQUEST to {URL}/answer/{token} with METHOD POST and BODY: {payload}")
+        print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+        return response.json()
+    except requests.HTTPError as http_err:
+        print(f"HTTP error occurred: {http_err}")
+        print(response.text)
+    except Exception as err:
+        print(f"An error occurred: {err}")
+
+
+
+
+def main():
+    task_name = "rodo"
+    token = get_token(task_name)
+    input_data = get_input(token)
+    
+    # Ensure placeholders are correct with single percent signs
+    placeholder_message = "Zamień name na %imie% , surname na %nazwisko% , city na %miasto% , country na %country% , zawod na %zawod%"
+    
+    print("Sending placeholder message:", placeholder_message)  # Debugging line
+    
+    # Submitting the placeholder message as the answer
+    result = submit(token, placeholder_message)
+    print(result)
+
+
+
+
+
+if __name__ == "__main__":
+    main()
+
