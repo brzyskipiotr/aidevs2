@@ -5,7 +5,6 @@ import logging
 AI_DEVS_API_KEY = ""  # Wartość należy zastąpić rzeczywistym kluczem API
 OPENAI_API_KEY = ""  # Rzeczywisty klucz API dla OpenAI
 OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions"  
-URL = "https://zadania.aidevs.pl"
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
