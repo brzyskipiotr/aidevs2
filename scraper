@@ -1,0 +1,150 @@
+import requests
+import time
+import logging
+import json
+
+# Konfiguracja
+AI_DEVS_API_KEY = ""  # Wartość należy zastąpić  kluczem API
+OPENAI_API_KEY = ""  # klucz API dla OpenAI
+OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions"  
+URL = "https://zadania.aidevs.pl"
+
+# Nagłówki dla zapytań HTTP
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+}
+
+# Konfiguracja logowania
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
+def get_token(task):
+    response = requests.post(f"{URL}/token/{task}", json={"apikey": AI_DEVS_API_KEY})
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/token/{task} with BODY apikey: AI_DEVS_API_KEY")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+    return response.json()["token"]
+
+
+def get_input(token):
+    response = requests.get(f"{URL}/task/{token}")
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/task/{token} with METHOD GET")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+    return response.json()
+
+
+def submit(token, answer):
+    #debug
+    answer_content = answer['choices'][0]['message']['content']
+
+    # Czy odpowiedź to string
+    if not isinstance(answer_content, str):
+        raise ValueError("The answer content must be a string.")
+
+    # Obetnij do 200 znaków
+    answer_content = answer_content[:200]
+
+    # tworzenie odpowiedzi
+    payload = {"answer": answer_content}
+    response = requests.post(f"{URL}/answer/{token}", json=payload)
+
+    print(f"REQUEST to {URL}/answer/{token} with METHOD POST and BODY: {payload}")
+    try:
+        response.raise_for_status()  
+        print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+        return response.json()
+    except requests.exceptions.HTTPError:
+        print(f"HTTP error occurred: {response.status_code}")
+        print(f"Response body: {response.text}")
+        raise
+    except requests.exceptions.RequestException as e:
+        print(f"Request error occurred: {e}")
+        raise
+
+
+
+# Funkcja do bezpiecznego wysyłania zapytań z obsługą ponawiania i timeoutów
+def safe_request(method, url, **kwargs):
+    max_retries = 5
+    retries = 0
+    while retries < max_retries:
+        try:
+            if method == 'GET':
+                response = requests.get(url, **kwargs)
+            elif method == 'POST':
+                response = requests.post(url, **kwargs)
+            else:
+                raise ValueError("Unsupported HTTP method requested.")
+            
+            # Czy zwrócono prawidłową odpowiedź
+            if response.status_code == 200:
+                return response.text
+            else:
+                response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 500:
+                # odczekaj przed ponownieniem
+                time.sleep(2 ** retries)
+                retries += 1
+                continue
+            else:
+                # Jeśli bład jest inny niż 500 wyrzuć błąd
+                raise
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            time.sleep(2 ** retries)
+            retries += 1
+            continue
+    
+    # Jeśli przekroczysz ilość prób
+    raise Exception("Maximum retries exceeded")
+
+
+def ask_openai(question, text, openai_api_key):
+    headers = {
+        'Authorization': f'Bearer {openai_api_key}'
+    }
+    data = {
+        "model": "gpt-4",
+        "temperature": 0.1,
+        "messages": [
+            {
+                "role": "system",
+                "content": f"Pytanie: {question}\n\nOdpowiedz krótko po polsku"  
+            },
+            {
+                "role": "user",
+                "content": text  
+            }
+        ]
+    }
+
+    response = requests.post(OPENAI_ENDPOINT, headers=headers, json=data)
+    response_json = response.json()
+    print(f"REQUEST to {OPENAI_ENDPOINT} with METHOD POST, HEADERS: {headers}, BODY: {data}")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+
+    if response.status_code != 200:
+        raise Exception(f"Error from OpenAI: {response_json.get('error', response_json)}")
+    return response_json
+    
+    
+def main():
+    task_name = "scraper"
+    token = get_token(task_name)  # Używając `safe_request`
+    input_data = get_input(token)  # Używając `safe_request`
+
+    article_url = input_data['input']
+    question = input_data['question']
+    
+    # Pobranie treści artykułu
+    article_content = safe_request('GET', article_url, headers=headers)
+       
+    answer = ask_openai(question, article_content, OPENAI_API_KEY)
+
+    result = submit(token, answer)   
+   
+    logging.info(result)
+
+if __name__ == "__main__":
+    main()
