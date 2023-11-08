@@ -1,0 +1,85 @@
+import requests
+import time
+
+# Konfiguracja
+AI_DEVS_API_KEY = ""
+OPENAI_API_KEY = ""
+URL = "https://zadania.aidevs.pl"
+
+def debug_print(req_type, url, status, body):
+    print(f"{req_type} to {url} - Status: {status}, Body: {body}")
+
+def get_token(task):
+    url = f"{URL}/token/{task}"
+    response = requests.post(url, json={"apikey": AI_DEVS_API_KEY})
+    response.raise_for_status()
+    debug_print("POST", url, response.status_code, response.json())
+    return response.json()["token"]
+
+def get_hint(token):
+    url = f"{URL}/task/{token}"
+    response = requests.get(url)
+    response.raise_for_status()
+    debug_print("GET", url, response.status_code, response.json())
+    return response.json()["hint"]
+
+def submit(token, user_response):
+    url = f"{URL}/answer/{token}"
+    response = requests.post(url, json={"answer": user_response})
+    response.raise_for_status()
+    debug_print("POST", url, response.status_code, response.json())
+    return response.json()
+
+def call_openai_to_analyze_hints(hints):
+    url = "https://api.openai.com/v1/chat/completions"
+    headers = {
+        'Authorization': f'Bearer {OPENAI_API_KEY}',
+        'Content-Type': 'application/json'
+    }
+    data = {
+        "model": "gpt-4",
+        "temperature": 0.1,
+        "messages": [
+            {
+                "role": "system",
+                "content": f"Based on the following hints, who is the person being described? Provide the first and last name if you know. Otherwise, reply with 'next'."
+            },
+            {
+                "role": "user",
+                "content": " ".join(hints)
+            }
+        ]
+    }
+    response = requests.post(url, headers=headers, json=data)
+    if response.status_code == 200:
+        debug_print("POST", url, response.status_code, response.json())
+        return response.json()['choices'][0]['message']['content'].strip()
+    else:
+        debug_print("POST", url, response.status_code, response.text)
+        raise Exception(f"Error in OpenAI API call: {response.status_code} {response.text}")
+
+def main():
+    current_hints = []
+    token = get_token("whoami")
+    last_refresh_time = time.time()
+    
+    while True:
+        if time.time() - last_refresh_time >= 2:
+            token = get_token("whoami")
+            last_refresh_time = time.time()
+
+        new_hint = get_hint(token)
+        debug_print("New Hint", "n/a", "n/a", new_hint)
+        current_hints.append(new_hint)
+        
+        if len(current_hints) >= 1:  # Replace with 5 or 6 if necessary
+            response = call_openai_to_analyze_hints(current_hints)
+            if "next" not in response.lower():
+                submit(token, response)
+                debug_print("Identity Submitted", "n/a", "n/a", response)
+                break
+        
+        time.sleep(1)
+
+if __name__ == "__main__":
+    main()
