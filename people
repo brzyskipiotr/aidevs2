@@ -1,0 +1,113 @@
+import requests
+import json
+import pandas as pd
+import logging
+import re
+
+
+# Konfiguracja
+AI_DEVS_API_KEY = ""  # Wartość należy zastąpić rzeczywistym kluczem API
+OPENAI_API_KEY = ""  # Rzeczywisty klucz API dla OpenAI
+OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions"  
+URL = "https://zadania.aidevs.pl"
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+def get_token(task):
+    response = requests.post(f"{URL}/token/{task}", json={"apikey": AI_DEVS_API_KEY})
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/token/{task} with BODY apikey: AI_DEVS_API_KEY")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+
+    return response.json()["token"]
+
+
+def get_input(token):
+    response = requests.get(f"{URL}/task/{token}")
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/task/{token} with METHOD GET")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+
+    return response.json()
+
+
+def submit(token, answer):
+    response = requests.post(f"{URL}/answer/{token}", json={"answer": answer})
+    print(f"REQUEST to {URL}/answer/{token} with METHOD POST and BODY: {{'answer': {answer}}}")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+    response.raise_for_status()
+    return response.json()
+
+def get_people_data():
+    response = requests.get("https://zadania.aidevs.pl/data/people.json")
+    response.raise_for_status()
+    data = response.json()
+    return pd.DataFrame(data)
+
+def extract_name(normalized_name_response):
+    # Przykładowy wzór do wyodrębnienia imienia i nazwiska
+    pattern = r'(\w+)\s+(\w+)'
+    match = re.search(pattern, normalized_name_response)
+    if match:
+        return {'imie': match.group(1), 'nazwisko': match.group(2)}
+    else:
+        return {'imie': '', 'nazwisko': ''}
+
+def process_data(df):
+    # Tutaj dodaj kod do optymalizacji i przetwarzania DataFrame
+    return df
+
+def get_answer_from_openai(question):
+    headers = {
+        'Authorization': f'Bearer {OPENAI_API_KEY}',
+        'Content-Type': 'application/json'
+    }
+
+    data = {
+        "model": "gpt-4",
+        "messages": [{"role": "user", "content": question}],
+        "temperature": 0.1
+    }
+
+    response = requests.post(OPENAI_ENDPOINT, headers=headers, json=data)
+    response.raise_for_status()
+
+    if response.status_code == 200:
+        # Wydrukuj odpowiedź, gdy status HTTP to 200
+        print("Odpowiedź od OpenAI API:", response.json())
+
+    return response.json()["choices"][0]["message"]["content"]
+  
+
+def main():
+    # Pobieranie pytania z API
+    token = get_token("people")
+    question_data = get_input(token)
+    question = question_data['question']
+
+    # Wysyłanie zapytania do OpenAI o znormalizowaną formę imienia i nazwiska
+    normalized_name_response = get_answer_from_openai(f"Proszę o znormalizowaną formę imienia i nazwiska z pytania: {question}. Podaj tylko imię i nazwisko.")
+    normalized_name = extract_name(normalized_name_response)  # Funkcja extract_name do napisania
+
+    # Wczytanie danych
+    people_data = get_people_data()
+    df = pd.DataFrame(people_data)
+
+    # Wyszukiwanie odpowiedzi w lokalnym dataset
+    filtr = (df['imie'] == normalized_name['imie']) & (df['nazwisko'] == normalized_name['nazwisko'])
+    znaleziona_osoba = df[filtr]
+
+    if not znaleziona_osoba.empty:
+        # Przesyłanie pytania i znalezionego rekordu do OpenAI
+        rekord = znaleziona_osoba.iloc[0].to_dict()
+        answer_from_openai = get_answer_from_openai(f"Pytanie: {question} Dane: {json.dumps(rekord)}")
+        answer = answer_from_openai
+    else:
+        answer = "Nie znaleziono osoby o podanym imieniu i nazwisku."
+
+    # Odsyłanie odpowiedzi
+    result = submit(token, answer)
+    print(answer)
+
+if __name__ == "__main__":
+    main()
