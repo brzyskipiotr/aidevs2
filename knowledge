@@ -1,0 +1,131 @@
+import requests
+import pandas as pd
+import logging
+import re
+
+
+# Konfiguracja
+AI_DEVS_API_KEY = "1be737a1-49f7-4993-9d81-6c204598ed9a"  # Wartość należy zastąpić rzeczywistym kluczem API
+OPENAI_API_KEY = "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"  # Rzeczywisty klucz API dla OpenAI
+OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions"  
+URL = "https://zadania.aidevs.pl"
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+def get_token(task):
+    response = requests.post(f"{URL}/token/{task}", json={"apikey": AI_DEVS_API_KEY})
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/token/{task} with BODY apikey: AI_DEVS_API_KEY")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+
+    return response.json()["token"]
+
+
+def get_input(token):
+    response = requests.get(f"{URL}/task/{token}")
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/task/{token} with METHOD GET")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+
+    return response.json()
+
+
+def submit(token, answer):
+    response = requests.post(f"{URL}/answer/{token}", json={"answer": answer})
+    print(f"REQUEST to {URL}/answer/{token} with METHOD POST and BODY: {{'answer': {answer}}}")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+    response.raise_for_status()
+    return response.json()
+
+
+def get_currency_rate(currency_code):
+    url = "http://api.nbp.pl/api/exchangerates/tables/a/today/"
+    response = requests.get(url)
+    response.raise_for_status()
+    data = response.json()
+
+    # Szukanie kursu dla podanego kodu waluty
+    for currency in data[0]['rates']:
+        if currency['code'] == currency_code:
+            return currency['mid']
+    return None
+
+def get_population_data(country_name):
+    url = f"https://restcountries.com/v3.1/name/{country_name}"
+    response = requests.get(url)
+    response.raise_for_status()
+    data = response.json()
+    return data[0]['population']
+
+def get_additional_info_from_openai(question, info_type):
+    prompt = f"Provide {info_type} from this question: {question}"
+    return get_answer_from_openai(prompt)
+
+def classify_question_with_openai(question):
+    headers = {
+        'Authorization': f'Bearer {OPENAI_API_KEY}',
+        'Content-Type': 'application/json'
+    }
+
+    data =  data = {
+        "model": "gpt-4",
+        "messages": [{"role": "user", "content": f'Question: Sklasyfikuj pytanie {question}, jeśli pytanie dotyczy populacji zwróc samo słowo "population", jeśli dotyczy kursu walutowego zwróć słowo "currency", w innym przypadku odpowiedz na pytanie.'}],
+        "temperature": 0.1
+    }
+    response = requests.post(OPENAI_ENDPOINT, headers=headers, json=data)
+    response.raise_for_status()
+
+    if response.status_code == 200:
+        # Wydrukuj odpowiedź, gdy status HTTP to 200
+        print("Odpowiedź od OpenAI API:", response.json())
+
+    return response.json()["choices"][0]["message"]["content"]
+
+def get_answer_from_openai(question):
+    headers = {
+        'Authorization': f'Bearer {OPENAI_API_KEY}',
+        'Content-Type': 'application/json'
+    }
+
+    data = {
+        "model": "gpt-4",
+        "messages": [{"role": "user", "content": question}],
+        "temperature": 0.1
+    }
+
+    response = requests.post(OPENAI_ENDPOINT, headers=headers, json=data)
+    response.raise_for_status()
+
+    if response.status_code == 200:
+        # Wydrukuj odpowiedź, gdy status HTTP to 200
+        print("Odpowiedź od OpenAI API:", response.json())
+
+    return response.json()["choices"][0]["message"]["content"]
+  
+
+def main():
+    # Pobieranie pytania z API
+    token = get_token("knowledge")
+    question_data = get_input(token)
+    question = question_data['question']
+
+    # Klasyfikacja pytania
+    question_type = classify_question_with_openai(question)
+
+    if question_type == "population":
+        country_name = get_additional_info_from_openai(question, 'Only country english name')
+        population = get_population_data(country_name)
+        answer = f"Populacja {country_name} wynosi {population} osób."
+    elif question_type == "currency":
+        currency_code = get_additional_info_from_openai(question, 'Only currency code in ISO 4217 standard')
+        currency_rate = get_currency_rate(currency_code)
+        answer = f"{currency_rate}"
+    else:
+        answer = get_answer_from_openai(question)
+
+    # Odsyłanie odpowiedzi
+    result = submit(token, answer)
+    print(result)
+
+if __name__ == "__main__":
+    main()
