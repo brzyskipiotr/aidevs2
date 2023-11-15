@@ -1,0 +1,74 @@
+import requests
+import logging
+from openai import OpenAI
+
+# Konfiguracja
+AI_DEVS_API_KEY = ""  # Rzeczywisty klucz API
+OPENAI_API_KEY = ""  # Klucz API dla GPT-4 Vision
+URL = "https://zadania.aidevs.pl"
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+def get_token(task):
+    response = requests.post(f"{URL}/token/{task}", json={"apikey": AI_DEVS_API_KEY})
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/token/{task} with BODY apikey: AI_DEVS_API_KEY")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+    return response.json()["token"]
+
+def get_input(token):
+    response = requests.get(f"{URL}/task/{token}")
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/task/{token} with METHOD GET")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+    return response.json()["url"]
+
+def analyze_image_with_openai_vision(image_url):
+    response = client.chat.completions.create(
+        model="gpt-4-vision-preview",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Jakiego koloru jest czapka na obrazku? Jeśli nie jest to gnom zróć samo słowo 'error'"},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": image_url,
+                        },
+                    },
+                ],
+            }
+        ],
+        max_tokens=300,
+    )
+    return response.choices[0].message.content
+
+def extract_hat_color(analysis_result):
+    return analysis_result
+   
+
+def submit(token, answer):
+    response = requests.post(f"{URL}/answer/{token}", json={"answer": answer})
+    print(f"REQUEST to {URL}/answer/{token} with METHOD POST and BODY: {{'answer': {answer}}}")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+    response.raise_for_status()
+    return response.json()
+
+def main():
+    try:
+        token = get_token("gnome")
+        image_url = get_input(token)
+        analysis_result = analyze_image_with_openai_vision(image_url)
+        hat_color = extract_hat_color(analysis_result)
+        print(f"Kolor czapki gnomu to: {hat_color}")
+
+        # Przesłanie odpowiedzi
+        result = submit(token, hat_color)
+        print(f"Wynik przesłania odpowiedzi: {result}")
+    except Exception as e:
+        logging.error(f"Wystąpił błąd: {e}")
+
+if __name__ == "__main__":
+    main()
