@@ -5,8 +5,8 @@ import re
 
 
 # Konfiguracja
-AI_DEVS_API_KEY = "1be737a1-49f7-4993-9d81-6c204598ed9a"  # Wartość należy zastąpić rzeczywistym kluczem API
-OPENAI_API_KEY = "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"  # Rzeczywisty klucz API dla OpenAI
+AI_DEVS_API_KEY = ""  # Wartość należy zastąpić rzeczywistym kluczem API
+OPENAI_API_KEY = ""  # Rzeczywisty klucz API dla OpenAI
 OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions"  
 URL = "https://zadania.aidevs.pl"
 
