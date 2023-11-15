@@ -1,0 +1,98 @@
+import requests
+from datetime import datetime
+import logging
+
+# Konfiguracja 
+AI_DEVS_API_KEY = ""
+OPENAI_API_KEY = ""
+OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions"
+URL = "https://zadania.aidevs.pl"
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+def get_token(task):
+    response = requests.post(f"{URL}/token/{task}", json={"apikey": AI_DEVS_API_KEY})
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/token/{task} with BODY apikey: AI_DEVS_API_KEY")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+
+    return response.json()["token"]
+
+
+def get_input(token):
+    response = requests.get(f"{URL}/task/{token}")
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/task/{token} with METHOD GET")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+
+    return response.json()
+
+
+def submit(token, answer):
+    response = requests.post(f"{URL}/answer/{token}", json={"answer": answer})
+    print(f"REQUEST to {URL}/answer/{token} with METHOD POST and BODY: {{'answer': {answer}}}")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+    response.raise_for_status()
+    return response.json()
+
+def get_date_from_openai(relative_date):
+    headers = {
+        'Authorization': f'Bearer {OPENAI_API_KEY}',
+        'Content-Type': 'application/json'
+    }
+    today = datetime.now()
+    today_date_str = today.strftime("%Y-%m-%d")
+    today_weekday_str = today.strftime("%A")
+    prompt = f"Today is {today_weekday_str}, {today_date_str}. What will be the date, if today is '{relative_date}'?. Return only date in format RRRR-MM-DD and nothing more"
+
+    data = {
+        "model": "gpt-4",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.1
+    }
+
+    response = requests.post(OPENAI_ENDPOINT, headers=headers, json=data)
+    response.raise_for_status()
+    if response.status_code == 200:
+        # Wydrukuj odpowiedź, gdy status HTTP to 200
+        print("Odpowiedź od OpenAI API:", response.json())
+    return response.json()["choices"][0]["message"]["content"]
+
+def classify_task_with_openai(question):
+    headers = {
+        'Authorization': f'Bearer {OPENAI_API_KEY}',
+        'Content-Type': 'application/json'
+    }
+
+    prompt = f"Decide whether the following task should be added to a ToDo list or to a calendar. If it has a specific date or word with mean date return word 'Calendar', otherwise return only word 'ToDo'. Task: '{question}'"
+
+    data = {
+        "model": "gpt-4",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.1
+    }
+
+    response = requests.post(OPENAI_ENDPOINT, headers=headers, json=data)
+    response.raise_for_status()
+    if response.status_code == 200:
+        # Wydrukuj odpowiedź, gdy status HTTP to 200
+        print("Odpowiedź od OpenAI API:", response.json())
+    task_classification = response.json()["choices"][0]["message"]["content"]
+
+    if "Calendar" in task_classification:
+        date = get_date_from_openai(question)
+        return {"tool": "Calendar", "desc": question, "date": date.strip()}  # Używanie rzeczywistej daty
+    else:
+        return {"tool": "ToDo", "desc": question}
+
+def main():
+    token = get_token("tools")
+    task_data = get_input(token)
+    question = task_data['question']
+
+    answer = classify_task_with_openai(question)
+    result = submit(token, answer)
+    print(result)
+
+if __name__ == "__main__":
+    main()
