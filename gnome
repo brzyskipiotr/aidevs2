@@ -1,10 +1,16 @@
 import requests
+from dotenv import load_dotenv
+import os
 import logging
 from openai import OpenAI
 
+# Ładowanie zmiennych środowiskowych z pliku .env
+load_dotenv()
+
 # Konfiguracja
-AI_DEVS_API_KEY = ""  # Rzeczywisty klucz API
-OPENAI_API_KEY = ""  # Klucz API dla GPT-4 Vision
+AI_DEVS_API_KEY = os.getenv("AI_DEVS_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions"
 URL = "https://zadania.aidevs.pl"
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -62,7 +68,7 @@ def main():
         image_url = get_input(token)
         analysis_result = analyze_image_with_openai_vision(image_url)
         hat_color = extract_hat_color(analysis_result)
-        print(f"Kolor czapki gnomu to: {hat_color}")
+        print(f"{hat_color}")
 
         # Przesłanie odpowiedzi
         result = submit(token, hat_color)
