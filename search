@@ -1,0 +1,95 @@
+import requests
+from qdrant_client import QdrantClient
+import requests
+from dotenv import load_dotenv
+import logging
+from openai import OpenAI
+
+# Konfiguracja
+AI_DEVS_API_KEY = ''
+OPENAI_API_KEY=''
+URL = "https://zadania.aidevs.pl"
+qdrant_client = QdrantClient(host='localhost', port=6333)
+collection_name = 'unknown'
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+def get_token(task):
+    response = requests.post(f"{URL}/token/{task}", json={"apikey": AI_DEVS_API_KEY})
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/token/{task} with BODY apikey: AI_DEVS_API_KEY")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+
+    return response.json()["token"]
+
+
+def get_input(token):
+    response = requests.get(f"{URL}/task/{token}")
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/task/{token} with METHOD GET")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+
+    return response.json()
+
+
+def submit(token, answer):
+    response = requests.post(f"{URL}/answer/{token}", json={"answer": answer})
+    print(f"REQUEST to {URL}/answer/{token} with METHOD POST and BODY: {{'answer': {answer}}}")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+    response.raise_for_status()
+    return response.json()
+
+# Funkcja do konwersji pytania na wektor
+def get_embedding(text):
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    data = {"input": text}
+    response = requests.post("https://api.openai.com/v1/engines/text-embedding-ada-002/embeddings", headers=headers, json=data)
+    response.raise_for_status()
+    return response.json()["data"][0]["embedding"]
+
+def search_in_qdrant(query_vector):
+    search_results = qdrant_client.search(
+        collection_name=collection_name,
+        query_vector=query_vector,
+        top=1
+    )
+    print(f"Search results: {search_results}")  # Wydrukuj wyniki wyszukiwania
+    return search_results
+
+
+
+# Główna funkcja
+def main():
+    
+    token = get_token("search")
+    question_data = get_input(token)
+    question = question_data['question']
+
+    # Konwersja pytania na wektor
+    question_vector = get_embedding(question)
+
+    # Wyszukiwanie w Qdrant
+    results = search_in_qdrant(question_vector)
+
+    # Pobranie URL z wyników
+    if results and len(results) > 0:
+        first_hit = results[0]  # Pobierz pierwszy wynik z listy
+        answer_url = first_hit.payload.get('url')  # Pobierz URL z payload
+        print(f"Odpowiedź: {answer_url}")
+
+        # Przesłanie odpowiedzi
+        result = submit(token, answer_url)
+        print(f"Wynik przesłania odpowiedzi: {result}")
+    else:
+        print("Nie znaleziono odpowiedzi.")
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
