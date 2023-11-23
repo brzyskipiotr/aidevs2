@@ -1,0 +1,84 @@
+import requests
+import logging
+
+# Configuration
+AI_DEVS_API_KEY = " "  
+RENDERFORM_API_KEY = " "
+URL = "https://zadania.aidevs.pl"
+RENDERFORM_API_URL = "https://get.renderform.io/api/v2/render"  # API URL for RenderForm
+
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+def get_token(task):
+    response = requests.post(f"{URL}/token/{task}", json={"apikey": AI_DEVS_API_KEY})
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/token/{task} with BODY apikey: AI_DEVS_API_KEY")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+    return response.json()["token"]
+
+def get_input(token):
+    response = requests.get(f"{URL}/task/{token}")
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/task/{token} with METHOD GET")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+
+    return response.json()
+
+def submit(token, answer_as_string):
+    json_data = {"answer": answer_as_string}
+    headers = {"Content-Type": "application/json"}
+
+    # Dodanie linii debugowania
+    logging.debug(f"Submitting URL to API: {answer_as_string}")
+    logging.debug(f"JSON data being sent: {json_data}")
+
+    response = requests.post(f"{URL}/answer/{token}", json=json_data, headers=headers)
+
+    # Dodatkowe logowanie odpowiedzi w przypadku błędu
+    if response.status_code != 200:
+        logging.error(f"Error response from submission API: {response.text}")
+        response.raise_for_status()
+    else:
+        logging.debug(f"Successful response from submission API: {response.json()}")
+
+    return response.json()
+
+
+def generate_meme(template_id, image_url, text):
+    data = {
+        "template": template_id,
+        "data": {
+            "testy.text": text,   #text
+            "XXX.src": image_url  #image
+        }
+    }
+    headers = {
+        "X-API-KEY": RENDERFORM_API_KEY,
+        "Content-Type": "application/json"
+    }
+    logging.debug(f"Sending data to RenderForm API: {data}")
+    response = requests.post(RENDERFORM_API_URL, json=data, headers=headers)
+    if response.status_code == 200:
+        return response.json()["href"]
+    else:
+        logging.error(f"Error response from RenderForm API: {response.json()}")
+        raise Exception(f"Error in RenderForm API: {response.json()}")
+
+def main():
+    token = get_token("meme")
+
+    # Retrieve the template URL, image URL and text for the meme
+    task_data = get_input(token)
+    template_id = "dirty-werewolves-retire-fast-1764"  #  template URL
+    image_url = task_data['image']
+    text = task_data['text']
+
+    meme_url = generate_meme(template_id, image_url, text)
+
+    # Submit the meme URL
+    result = submit(token, meme_url)
+    print(f"Result of submission: {result}")
+
+if __name__ == "__main__":
+    main()
