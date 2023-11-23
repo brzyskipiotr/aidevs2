@@ -1,0 +1,52 @@
+import requests
+import logging
+
+# Configuration
+AI_DEVS_API_KEY = ""  
+URL = "https://zadania.aidevs.pl"
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+def get_token(task):
+    response = requests.post(f"{URL}/token/{task}", json={"apikey": AI_DEVS_API_KEY})
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/token/{task} with BODY apikey: AI_DEVS_API_KEY")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+    return response.json()["token"]
+
+def submit(token, answer_as_string):
+    json_data = {"answer": answer_as_string}
+    headers = {"Content-Type": "application/json"}
+    response = requests.post(f"{URL}/answer/{token}", json=json_data, headers=headers)
+    
+    
+    # Debugging prints
+    print(f"REQUEST to {URL}/answer/{token} with METHOD POST and BODY: {json_data}")
+    
+    # Check response status and print details
+    if response.status_code != 200:
+        print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.text}")
+        response.raise_for_status()
+    else:
+        print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+        return response.json()
+
+
+
+def load_optimized_database(file_path):
+    with open(file_path, 'r') as file:
+        optimized_data = file.read()
+    return optimized_data
+
+def main():
+    token = get_token("optimaldb")
+    
+    
+    optimized_db_string = load_optimized_database('optimized_db.json')
+
+    # Submit the optimized database string
+    result = submit(token, optimized_db_string)
+    print(f"Result of submission: {result}")
+
+if __name__ == "__main__":
+    main()
