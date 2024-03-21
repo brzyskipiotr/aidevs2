@@ -1,42 +1,70 @@
 import requests
-import sys
 import json
 import logging
 
-debug_mode = True
-
-if debug_mode:
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-
+# Konfiguracja
+AI_DEVS_API_KEY = ""
+OPENAI_API_KEY = ""
+OPENAI_ENDPOINT = "https://api.openai.com/v1/"  
 URL = "https://zadania.aidevs.pl"
-TOKEN = "/token/"
-TASK = "/task/"
-ANSWER = "/answer/"
 
-api_key = ""
-task_name = "moderation"
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
-api_key_openai=""
 
-logging.debug(f"API key: {api_key}\nTask name: {task_name}")
-
-try:
-    response = requests.post(URL + TOKEN + task_name, json={"apikey": api_key})
+def get_token(task):
+    response = requests.post(f"{URL}/token/{task}", json={"apikey": AI_DEVS_API_KEY})
     response.raise_for_status()
-    json_response = response.json()
-    token = json_response.get("token")
-    logging.info(f"Received token: {token}")
+    print(f"REQUEST to {URL}/token/{task} with BODY apikey: AI_DEVS_API_KEY")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+    return response.json()["token"]
 
-    response = requests.get(URL + TASK + token)
-    response.raise_for_status()
-    json_response = response.json()
-    answer = [1,1,1,0]
-    logging.info(f"Received answer: {answer}")
 
-    response = requests.post(URL + ANSWER + token, json={"answer": answer})
+def get_input(token):
+    response = requests.get(f"{URL}/task/{token}")
     response.raise_for_status()
-    json_response = response.json()
-    print(json_response)
-except (requests.exceptions.RequestException, json.JSONDecodeError) as e:
-    logging.error(f"An error occurred: {e}")
-    sys.exit(1)
+    print(f"REQUEST to {URL}/task/{token} with METHOD GET")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+    return response.json()
+
+def moderate_content(sentences):
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    moderation_results = []
+    for sentence in sentences:
+        data = {
+            "input": sentence,  
+            "model": "text-moderation-latest"
+        }
+        response = requests.post(f"{OPENAI_ENDPOINT}moderations", headers=headers, json=data)
+        response.raise_for_status()
+        result = response.json()
+
+        
+        if 'results' in result and len(result['results']) > 0:
+            moderation_result = result['results'][0]
+            flagged = 1 if moderation_result.get('flagged', False) else 0
+            moderation_results.append(flagged)
+        else:
+            moderation_results.append(0)
+    return moderation_results
+
+
+def submit_answer(token, moderation_results):
+    response = requests.post(f"{URL}/answer/{token}", json={"answer": moderation_results})
+    response.raise_for_status()
+    print(f"REQUEST to {URL}/answer/{token} with METHOD POST and BODY: {moderation_results}")
+    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
+
+def main():
+    token = get_token("moderation")
+    input_data = get_input(token)
+    sentences = input_data.get('input', [])
+    moderation_results = moderate_content(sentences)
+    print(f"Moderation results: {moderation_results}")
+    submit_answer(token, moderation_results)
+
+if __name__ == "__main__":
+    main()
+
