@@ -28,8 +28,8 @@ def get_input(token):
 
 
 def submit(token, blog_content):
-    content_dict = {section: None for section in blog_content}
-    response = requests.post(f"{URL}/answer/{token}", json=content_dict)
+    content_dict = {section["title"]: section["content"] for section in blog_content}
+    response = requests.post(f"{URL}/answer/{token}", json={"answer": list(content_dict.values())})
     response.raise_for_status()
     print(f"REQUEST to {URL}/answer/{token} with METHOD POST and BODY: {content_dict}")
     print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
