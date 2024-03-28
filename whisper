@@ -46,12 +46,14 @@ def transcribe_with_whisper(audio_url):
     audio_file.name = 'temp_audio.mp3'  # Ustawienie atrybutu name, wymaganego przez API
 
     # Wykonanie transkrypcji za pomocą Whisper
-    transcript_response = openai.Audio.transcribe(model="whisper-1", file=audio_file)
+    transcription_response = openai.Audio.transcribe(model="whisper-1", file=audio_file)
     
     # Zamykamy obiekt BytesIO
     audio_file.close()
 
-    return transcript_response["text"]
+    return transcription_response["text"]
+
+
 
 def main():
     task_name = "whisper"
