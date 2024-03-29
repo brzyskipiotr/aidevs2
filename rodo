@@ -2,8 +2,8 @@ import requests
 import logging
 
 # Konfiguracja
-AI_DEVS_API_KEY = ""  # Wartość należy zastąpić rzeczywistym kluczem API
-OPENAI_API_KEY = ""  # Rzeczywisty klucz API dla OpenAI
+AI_DEVS_API_KEY = ""
+OPENAI_API_KEY = ""
 OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions"  
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -54,7 +54,7 @@ def main():
     input_data = get_input(token)
     
     # Ensure placeholders are correct with single percent signs
-    placeholder_message = "Zamień name na %imie% , surname na %nazwisko% , city na %miasto% , country na %country% , zawod na %zawod%"
+    placeholder_message = "Chang in the orginal message orginal values to placeholders. Change name to %imie%, surname to %nazwisko%, role to %zawod% , city to %miasto%,country to %country%."
     
     print("Sending placeholder message:", placeholder_message)  # Debugging line
     
@@ -68,4 +68,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
