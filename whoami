@@ -72,14 +72,22 @@ def main():
         debug_print("New Hint", "n/a", "n/a", new_hint)
         current_hints.append(new_hint)
         
-        if len(current_hints) >= 1:  # Replace with 5 or 6 if necessary
+        # Sprawdzamy, czy mamy wystarczająco dużo wskazówek (można dostosować limit)
+        if len(current_hints) >= 1:  # Aby uniknąć zbyt wczesnych zgadywań, rozważ ustawienie tego limitu na wyższą wartość
             response = call_openai_to_analyze_hints(current_hints)
-            if "next" not in response.lower():
+            
+            # Warunek sprawdzający, czy odpowiedź faktycznie wskazuje na konkretną osobę
+            if "next" not in response.lower() and "the hint is too vague" not in response.lower():
                 submit(token, response)
                 debug_print("Identity Submitted", "n/a", "n/a", response)
                 break
+            else:
+                # Jeśli odpowiedź nie jest wystarczająco konkretna, kontynuujemy gromadzenie wskazówek
+                debug_print("Additional Information Required", "n/a", "n/a", "Gathering more hints...")
         
+        # Krótka pauza, aby uniknąć zbyt szybkiego odpytywania API
         time.sleep(1)
+
 
 if __name__ == "__main__":
     main()
