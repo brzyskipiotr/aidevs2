@@ -7,7 +7,7 @@ import logging
 import openai
 
 
-# Konfiguracja
+# Config
 AI_DEVS_API_KEY = ""
 OPENAI_API_KEY = ""
 URL = "https://zadania.aidevs.pl"
@@ -66,7 +66,7 @@ def get_vector_from_text(text):
     return vector
 
 
-# Główna funkcja
+# Main
 def main():
     
     token = get_token("search")
@@ -77,10 +77,10 @@ def main():
     print (f'question')
     question_vector = get_vector_from_text(question)
 
-    # Wyszukiwanie w Qdrant
+    # Search w Qdrant
     results = search_in_qdrant(question_vector)
 
-    # Pobranie URL z wyników
+    #  URL z Qdrant
     if results and len(results) > 0:
         first_hit = results[0]  # Get the first result
         url = first_hit.payload['metadata']['url']  # Extract URL from the first result's payload
