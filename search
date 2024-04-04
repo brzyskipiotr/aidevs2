@@ -1,25 +1,30 @@
+import os
 import requests
 from qdrant_client import QdrantClient
 import requests
 from dotenv import load_dotenv
 import logging
-from openai import OpenAI
+import openai
+
 
 # Konfiguracja
-AI_DEVS_API_KEY = ''
-OPENAI_API_KEY=''
+AI_DEVS_API_KEY = ""
+OPENAI_API_KEY = ""
 URL = "https://zadania.aidevs.pl"
 qdrant_client = QdrantClient(host='localhost', port=6333)
-collection_name = 'unknown'
+collection_name = 'unknownNews'
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+openai.api_key = OPENAI_API_KEY
+
+def debug_print(req_type, url, status, body):
+    print(f"{req_type} to {url} - Status: {status}, Body: {body}")
 
 def get_token(task):
-    response = requests.post(f"{URL}/token/{task}", json={"apikey": AI_DEVS_API_KEY})
+    url = f"{URL}/token/{task}"
+    response = requests.post(url, json={"apikey": AI_DEVS_API_KEY})
     response.raise_for_status()
-    print(f"REQUEST to {URL}/token/{task} with BODY apikey: AI_DEVS_API_KEY")
-    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
-
+    debug_print("POST", url, response.status_code, response.json())
     return response.json()["token"]
 
 
@@ -39,26 +44,26 @@ def submit(token, answer):
     response.raise_for_status()
     return response.json()
 
-# Funkcja do konwersji pytania na wektor
-def get_embedding(text):
-    headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    data = {"input": text}
-    response = requests.post("https://api.openai.com/v1/engines/text-embedding-ada-002/embeddings", headers=headers, json=data)
-    response.raise_for_status()
-    return response.json()["data"][0]["embedding"]
 
 def search_in_qdrant(query_vector):
+    # Adjusted call to match expected parameters of the QdrantClient search method
     search_results = qdrant_client.search(
         collection_name=collection_name,
         query_vector=query_vector,
-        top=1
+        limit=1  # Adjusted parameter name from 'top' to 'limit'
     )
-    print(f"Search results: {search_results}")  # Wydrukuj wyniki wyszukiwania
+    print(f"Search results: {search_results}")
     return search_results
 
+
+def get_vector_from_text(text):
+    response = openai.Embedding.create(
+        model="text-embedding-ada-002",
+        input=text
+    )
+    # Extracting the first embedding vector
+    vector = response['data'][0]['embedding']
+    return vector
 
 
 # Główna funkcja
@@ -68,27 +73,29 @@ def main():
     question_data = get_input(token)
     question = question_data['question']
 
-    # Konwersja pytania na wektor
-    question_vector = get_embedding(question)
+    # Convert the question to a vector (this step is missing in your original code)
+    print (f'question')
+    question_vector = get_vector_from_text(question)
 
     # Wyszukiwanie w Qdrant
     results = search_in_qdrant(question_vector)
 
     # Pobranie URL z wyników
     if results and len(results) > 0:
-        first_hit = results[0]  # Pobierz pierwszy wynik z listy
-        answer_url = first_hit.payload.get('url')  # Pobierz URL z payload
-        print(f"Odpowiedź: {answer_url}")
+        first_hit = results[0]  # Get the first result
+        url = first_hit.payload['metadata']['url']  # Extract URL from the first result's payload
 
-        # Przesłanie odpowiedzi
-        result = submit(token, answer_url)
-        print(f"Wynik przesłania odpowiedzi: {result}")
+        if url:
+            print(f"Odpowiedź: {url}")
+            result = submit(token, url)
+            print(f"Wynik przesłania odpowiedzi: {result}")
+        else:
+            print("Nie znaleziono odpowiedzi.")
     else:
         print("Nie znaleziono odpowiedzi.")
 
 if __name__ == "__main__":
     main()
-
 
 
 
