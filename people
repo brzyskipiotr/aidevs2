@@ -1,24 +1,32 @@
-import requests
+import os
 import json
 import pandas as pd
-import logging
 import re
+from qdrant_client import QdrantClient
+import requests
+from dotenv import load_dotenv
+import logging
+import openai
 
 
 # Konfiguracja
-AI_DEVS_API_KEY = ""  # Wartość należy zastąpić rzeczywistym kluczem API
-OPENAI_API_KEY = ""  # Rzeczywisty klucz API dla OpenAI
-OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions"  
+AI_DEVS_API_KEY = ""
+OPENAI_API_KEY = ""
 URL = "https://zadania.aidevs.pl"
+qdrant_client = QdrantClient(host='localhost', port=6333)
+collection_name = 'people'
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+openai.api_key = OPENAI_API_KEY
+
+def debug_print(req_type, url, status, body):
+    print(f"{req_type} to {url} - Status: {status}, Body: {body}")
 
 def get_token(task):
-    response = requests.post(f"{URL}/token/{task}", json={"apikey": AI_DEVS_API_KEY})
+    url = f"{URL}/token/{task}"
+    response = requests.post(url, json={"apikey": AI_DEVS_API_KEY})
     response.raise_for_status()
-    print(f"REQUEST to {URL}/token/{task} with BODY apikey: AI_DEVS_API_KEY")
-    print(f"RESPONSE STATUS: {response.status_code}, BODY: {response.json()}")
-
+    debug_print("POST", url, response.status_code, response.json())
     return response.json()["token"]
 
 
@@ -38,76 +46,107 @@ def submit(token, answer):
     response.raise_for_status()
     return response.json()
 
-def get_people_data():
-    response = requests.get("https://zadania.aidevs.pl/data/people.json")
-    response.raise_for_status()
-    data = response.json()
-    return pd.DataFrame(data)
 
-def extract_name(normalized_name_response):
-    # Przykładowy wzór do wyodrębnienia imienia i nazwiska
-    pattern = r'(\w+)\s+(\w+)'
-    match = re.search(pattern, normalized_name_response)
-    if match:
-        return {'imie': match.group(1), 'nazwisko': match.group(2)}
-    else:
-        return {'imie': '', 'nazwisko': ''}
+def search_in_qdrant(query_vector):
+    search_results = qdrant_client.search(
+        collection_name=collection_name,
+        query_vector=query_vector,
+        limit=1
+    )
+    print(f"Search results: {search_results}")
+    return search_results
 
-def process_data(df):
-    # Tutaj dodaj kod do optymalizacji i przetwarzania DataFrame
-    return df
 
-def get_answer_from_openai(question):
+def get_vector_from_text(text):
+    response = openai.Embedding.create(
+        model="text-embedding-ada-002",
+        input=text
+    )
+    # Extracting the first embedding vector
+    vector = response['data'][0]['embedding']
+    return vector
+
+def get_answer_from_openai(question, info):
+    url = "https://api.openai.com/v1/chat/completions"
     headers = {
         'Authorization': f'Bearer {OPENAI_API_KEY}',
         'Content-Type': 'application/json'
     }
-
     data = {
         "model": "gpt-4",
-        "messages": [{"role": "user", "content": question}],
-        "temperature": 0.1
+        "temperature": 0.1,
+        "messages": [
+            {
+                "role": "system",
+                "content": f"wskazówka do pytanie podana jest przez użytkownika: {question}"
+            },
+            {
+                "role": "user",
+                "content": info
+            }
+        ]
     }
 
-    response = requests.post(OPENAI_ENDPOINT, headers=headers, json=data)
-    response.raise_for_status()
+    print(f"Data sent to OpenAI: {json.dumps(data, indent=4)}")  # Dodajemy debugowanie danych wysyłanych
 
+    response = requests.post(url, headers=headers, json=data)
     if response.status_code == 200:
-        # Wydrukuj odpowiedź, gdy status HTTP to 200
-        print("Odpowiedź od OpenAI API:", response.json())
+        debug_print("POST", url, response.status_code, response.json())
+        print("Response from OpenAI:", response.json())  # Dodajemy debugowanie odpowiedzi otrzymanej
+        return response.json()['choices'][0]['message']['content'].strip()
+    else:
+        debug_print("POST", url, response.status_code, response.text)
+        raise Exception(f"Error in OpenAI API call: {response.status_code} {response.text}")
 
-    return response.json()["choices"][0]["message"]["content"]
-  
+
+
+
+def check_for_keywords(question, metadata):
+    # Upewniamy się, że funkcja sprawdza każde słowo kluczowe i zwraca wartość metadanej, jeśli pasuje
+    for keyword in ['kolor', 'film', 'info', 'postac', 'serial']:
+        if keyword in question.lower():
+            # Jeśli znajdziemy dopasowanie słowa kluczowego, zwracamy wartość metadanej bezpośrednio
+            return metadata.get(keyword)
+    # Jeśli żadne słowo kluczowe nie pasuje, zwracamy None, aby sygnalizować konieczność użycia OpenAI
+    return None
 
 def main():
-    # Pobieranie pytania z API
     token = get_token("people")
     question_data = get_input(token)
     question = question_data['question']
 
-    # Wysyłanie zapytania do OpenAI o znormalizowaną formę imienia i nazwiska
-    normalized_name_response = get_answer_from_openai(f"Proszę o znormalizowaną formę imienia i nazwiska z pytania: {question}. Podaj tylko imię i nazwisko.")
-    normalized_name = extract_name(normalized_name_response)  # Funkcja extract_name do napisania
+    print('Question:', question)
+    question_vector = get_vector_from_text(question)
 
-    # Wczytanie danych
-    people_data = get_people_data()
-    df = pd.DataFrame(people_data)
-
-    # Wyszukiwanie odpowiedzi w lokalnym dataset
-    filtr = (df['imie'] == normalized_name['imie']) & (df['nazwisko'] == normalized_name['nazwisko'])
-    znaleziona_osoba = df[filtr]
-
-    if not znaleziona_osoba.empty:
-        # Przesyłanie pytania i znalezionego rekordu do OpenAI
-        rekord = znaleziona_osoba.iloc[0].to_dict()
-        answer_from_openai = get_answer_from_openai(f"Pytanie: {question} Dane: {json.dumps(rekord)}")
-        answer = answer_from_openai
+    # Wyszukiwanie w Qdrant
+    search_results = search_in_qdrant(question_vector)
+    print(search_results)
+    
+    answer = "Nie znaleziono odpowiednich informacji w bazie danych."  # Zdefiniuj 'answer' na tym poziomie
+    
+    if search_results and len(search_results) > 0:
+        first_result = search_results[0]
+        metadata = first_result.payload['metadata']
+        
+        keyword_answer = check_for_keywords(question, metadata)
+        if keyword_answer:
+            print('Keyword answer:', keyword_answer)
+            answer = keyword_answer  # Uaktualnij 'answer' z wartością słowa kluczowego
+        else:
+            # Jeśli nie znaleziono kluczowego słowa, wykorzystaj OpenAI do uzyskania odpowiedzi
+            info = metadata.get('info', 'Brak informacji')
+            answer = get_answer_from_openai(question, info)  # Uaktualnij 'answer' z odpowiedzią z OpenAI
+            print('Answer from OpenAI:', answer)
     else:
-        answer = "Nie znaleziono osoby o podanym imieniu i nazwisku."
+        print("Nie znaleziono odpowiednich informacji w bazie danych.")
 
-    # Odsyłanie odpowiedzi
-    result = submit(token, answer)
-    print(answer)
+    # Przesyłanie odpowiedzi - teraz tylko jedno wywołanie 'submit' na końcu funkcji
+    submit_result = submit(token, answer)
+    print(f"Submit result: {submit_result}")
 
 if __name__ == "__main__":
     main()
+
+
+
+
