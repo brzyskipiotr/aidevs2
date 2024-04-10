@@ -2,19 +2,19 @@ import requests
 from dotenv import load_dotenv
 import os
 import logging
-from openai import OpenAI
+import openai
 
 # Ładowanie zmiennych środowiskowych z pliku .env
 load_dotenv()
 
 # Konfiguracja
-AI_DEVS_API_KEY = os.getenv("AI_DEVS_API_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+AI_DEVS_API_KEY = ""
+OPENAI_API_KEY = ""
 OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions"
 URL = "https://zadania.aidevs.pl"
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-client = OpenAI(api_key=OPENAI_API_KEY)
+openai.api_key = OPENAI_API_KEY
 
 def get_token(task):
     response = requests.post(f"{URL}/token/{task}", json={"apikey": AI_DEVS_API_KEY})
@@ -31,8 +31,8 @@ def get_input(token):
     return response.json()["url"]
 
 def analyze_image_with_openai_vision(image_url):
-    response = client.chat.completions.create(
-        model="gpt-4-vision-preview",
+    response = openai.ChatCompletion.create(
+ 	model="gpt-4-turbo",
         messages=[
             {
                 "role": "user",
@@ -50,6 +50,7 @@ def analyze_image_with_openai_vision(image_url):
         max_tokens=300,
     )
     return response.choices[0].message.content
+
 
 def extract_hat_color(analysis_result):
     return analysis_result
