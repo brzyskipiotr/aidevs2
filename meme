@@ -4,7 +4,7 @@ import logging
 # Configuration
 AI_DEVS_API_KEY = " "  
 RENDERFORM_API_KEY = " "
-URL = "https://zadania.aidevs.pl"
+URL = "https://tasks.aidevs.pl"
 RENDERFORM_API_URL = "https://get.renderform.io/api/v2/render"  # API URL for RenderForm
 
 
