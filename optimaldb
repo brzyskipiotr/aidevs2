@@ -3,7 +3,7 @@ import logging
 
 # Configuration
 AI_DEVS_API_KEY = ""  
-URL = "https://zadania.aidevs.pl"
+URL = "https://tasks.aidevs.pl"
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
